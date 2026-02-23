@@ -20,6 +20,8 @@ MARKET_TIMEZONE = pytz.timezone("America/New_York")
 USERS_DB = "auth_data/users.db"
 ADMIN_EMAIL = "ozytargetcom@gmail.com"
 ADMIN_PASSWORD_HASH = None  # Set during init
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+ADMIN_PASSWORD_HASH_ENV = os.getenv("ADMIN_PASSWORD_HASH", "")
 
 # Logger setup
 logger = logging.getLogger(__name__)
@@ -333,7 +335,19 @@ def authenticate_admin(email: str, password: str) -> tuple:
             result = c.fetchone()
             
             if not result:
-                # Create admin account
+                # Create admin account only if bootstrap secret matches
+                if ADMIN_PASSWORD_HASH_ENV:
+                    if not bcrypt.checkpw(password.encode('utf-8'), ADMIN_PASSWORD_HASH_ENV.encode('utf-8')):
+                        conn.close()
+                        return False, "Invalid admin password"
+                elif ADMIN_PASSWORD:
+                    if password != ADMIN_PASSWORD:
+                        conn.close()
+                        return False, "Invalid admin password"
+                else:
+                    conn.close()
+                    return False, "Admin bootstrap disabled. Set ADMIN_PASSWORD or ADMIN_PASSWORD_HASH."
+
                 password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                 admin_tier = "Admin"
                 created_date = datetime.now(MARKET_TIMEZONE).isoformat()

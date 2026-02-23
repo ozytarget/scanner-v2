@@ -10,15 +10,12 @@ load_dotenv()
 
 # Check environment variable
 INITIAL_PASSWORDS_ENV = os.getenv("INITIAL_PASSWORDS", "")
-print(f"✓ INITIAL_PASSWORDS env variable: {INITIAL_PASSWORDS_ENV[:100]}...")
-print(f"✓ Length: {len(INITIAL_PASSWORDS_ENV)}")
+print(f"✓ INITIAL_PASSWORDS length: {len(INITIAL_PASSWORDS_ENV)}")
 
 # Parse passwords
 if INITIAL_PASSWORDS_ENV:
     passwords_list = [pwd.strip() for pwd in INITIAL_PASSWORDS_ENV.split(",") if pwd.strip()]
     print(f"\n✓ Parsed {len(passwords_list)} passwords from environment variable")
-    print(f"  First 5: {passwords_list[:5]}")
-    print(f"  'spy11' in list: {'spy11' in passwords_list}")
 else:
     print("\n✗ INITIAL_PASSWORDS is EMPTY!")
     passwords_list = []

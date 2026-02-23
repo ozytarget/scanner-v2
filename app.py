@@ -246,17 +246,17 @@ def authenticate_password(input_password):
                     passwords[hashed_pwd]["ip2"] = local_ip
                 passwords[hashed_pwd]["usage_count"] += 1
                 save_passwords(passwords)
-                logger.info(f"Authentication successful for {input_password} from IP: {local_ip}, usage count: {passwords[hashed_pwd]['usage_count']}")
+                logger.info(f"Authentication successful from IP: {local_ip}, usage count: {passwords[hashed_pwd]['usage_count']}")
                 return True
             elif data["usage_count"] == 2 and (data["ip1"] == local_ip or data["ip2"] == local_ip):
-                logger.info(f"Repeat authentication successful for {input_password} from IP: {local_ip}")
+                logger.info(f"Repeat authentication successful from IP: {local_ip}")
                 return True
             else:
                 st.error("❌ This password has already been used by two IPs. To get your own access to Pro Scanner, text 'Pro Scanner Access' to 678-978-9414.")
                 logger.warning(f"Authentication attempt for {input_password} from IP {local_ip} rejected; already used from {data['ip1']} and {data['ip2']}")
                 return False
     st.error("❌ Incorrect password. If you don’t have access, text 'Pro Scanner Access' to 678-978-9414 to purchase your subscription.")
-    logger.warning(f"Authentication failed: Invalid password {input_password}")
+    logger.warning("Authentication failed: Invalid password")
     return False
 
 def initialize_session_state() -> None:
@@ -297,10 +297,10 @@ def login_alumno():
             # Usar el sistema de autenticación de passwords.db (40 contraseñas)
             if authenticate_password(password):
                 st.session_state["authenticated"] = True
-                st.session_state["current_user"] = f"trader_{password}"
+                st.session_state["current_user"] = "legacy_password_user"
                 st.session_state["user_tier"] = "PRO"
                 st.session_state["daily_limit"] = None  # Sin límite
-                st.session_state["session_token"] = f"token_{password}"
+                st.session_state["session_token"] = create_session(st.session_state["current_user"])
                 st.success("✅ ¡Acceso concedido!")
                 st.rerun()
             # Si falla authenticate_password, el error ya se mostró en la función
