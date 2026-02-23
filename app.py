@@ -5415,16 +5415,6 @@ def main():
     # TAB 2: CRAZY SCANNER (FinViz Elite Integration)
     # ==================================================================================
     if active_tab == tab_labels[1]:
-        st.markdown("""
-        <div style='text-align: center; padding: 20px; background: linear-gradient(90deg, #FF00FF, #FF8C00); border-radius: 10px;'>
-            <h1 style='color: white; font-size: 48px; text-shadow: 0 0 10px rgba(255,255,255,0.8);'>
-                🚀 CRAZY SCANNER 🚀
-            </h1>
-            <p style='color: white; font-size: 18px;'>Powered by Ozy | Real-Time Market Data</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("---")
         
         # FinViz Elite Configuration (loaded from .env for security)
         FINVIZ_API_TOKEN = os.getenv("FINVIZ_API_TOKEN", "")
