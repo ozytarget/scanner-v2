@@ -9588,13 +9588,16 @@ def main():
         with col_h2:
             st.markdown('<p class="main-header">📊 MM Target Engine</p>', unsafe_allow_html=True)
 
+        if "calc_save_json" not in st.session_state:
+            st.session_state["calc_save_json"] = False
+
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             ticker = st.text_input("", placeholder="Ticker: SPY, QQQ, AAPL, TSLA, NVDA...", label_visibility="collapsed", key="calc_ticker")
         with col2:
             analyze_button = st.button("🚀 ANALIZAR", type="primary", use_container_width=True, key="calc_analyze_btn")
         with col3:
-            save_json = st.checkbox("💾 Export JSON", value=False, key="calc_save_json")
+            st.checkbox("💾 Export JSON", key="calc_save_json")
 
         if analyze_button and ticker:
             with st.spinner(f"Analizando {ticker.upper()}..."):
@@ -9604,7 +9607,6 @@ def main():
                     st.session_state["calc_market"] = market
                     st.session_state["calc_analysis"] = analysis
                     st.session_state["calc_analyzed"] = True
-                    st.session_state["calc_save_json"] = save_json
                 except Exception as e:
                     st.error(f"❌ {str(e)}")
                     st.session_state["calc_analyzed"] = False
