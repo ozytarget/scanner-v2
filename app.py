@@ -4692,6 +4692,7 @@ def main():
         "| Target Generator |",
         "|  Metrics  |",
         "| Multi-Date Options |",
+        "| calculo |",
     ]
     active_tab = st.radio(
         "",
@@ -8926,6 +8927,859 @@ def main():
             )
 
         st.markdown("</section></div>", unsafe_allow_html=True)
+
+
+    # Tab 10: calculo
+    if active_tab == tab_labels[9]:
+        import math
+
+        st.markdown(
+            """
+            <style>
+                #MainMenu {visibility: hidden;}
+                footer {visibility: hidden;}
+                header {visibility: hidden;}
+
+                .block-container {
+                    padding-top: 1rem;
+                    padding-bottom: 0rem;
+                    padding-left: 2rem;
+                    padding-right: 2rem;
+                    max-width: 100%;
+                }
+
+                .main-header {
+                    font-size: 2rem;
+                    font-weight: 800;
+                    text-align: center;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    margin-bottom: 0.5rem;
+                    text-transform: uppercase;
+                    letter-spacing: 2px;
+                }
+
+                div[data-testid="metric-container"] {
+                    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+                    border-radius: 8px;
+                    padding: 8px 12px;
+                    border: 1px solid #667eea30;
+                }
+
+                div[data-testid="metric-container"] label {
+                    font-size: 0.75rem !important;
+                    font-weight: 600 !important;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                }
+
+                div[data-testid="metric-container"] [data-testid="stMetricValue"] {
+                    font-size: 1.5rem !important;
+                    font-weight: 700 !important;
+                }
+
+                .stDataFrame {
+                    font-size: 0.85rem;
+                }
+
+                .stTabs [data-baseweb="tab-list"] {
+                    gap: 2px;
+                    background: #f0f2f6;
+                    border-radius: 8px;
+                    padding: 4px;
+                }
+
+                .stTabs [data-baseweb="tab"] {
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-weight: 600;
+                    font-size: 0.85rem;
+                }
+
+                .stTabs [aria-selected="true"] {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white !important;
+                }
+
+                .bullish { color: #00c853; font-weight: 700; }
+                .bearish { color: #ff1744; font-weight: 700; }
+                .neutral { color: #ffa726; font-weight: 700; }
+
+                .streamlit-expanderHeader {
+                    font-size: 0.9rem;
+                    font-weight: 600;
+                }
+
+                h3 {
+                    margin-top: 1rem !important;
+                    margin-bottom: 0.5rem !important;
+                    font-size: 1.2rem !important;
+                    font-weight: 700 !important;
+                }
+
+                hr {
+                    margin: 0.5rem 0 !important;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        def get_market_data(ticker: str) -> dict:
+            """Obtiene datos de mercado en tiempo real."""
+            yf_ticker = ticker.upper()
+            if yf_ticker == "VIX":
+                yf_ticker = "^VIX"
+            elif yf_ticker == "SPX":
+                yf_ticker = "^GSPC"
+
+            t = yf.Ticker(yf_ticker)
+            hist = t.history(period="5d")
+
+            if hist.empty:
+                raise ValueError(f"No se encontró precio para {ticker}")
+
+            spot = float(hist["Close"].iloc[-1])
+            prev_close = float(hist["Close"].iloc[-2]) if len(hist) > 1 else spot
+            change = spot - prev_close
+            change_pct = (change / prev_close * 100) if prev_close else 0
+
+            vix_t = yf.Ticker("^VIX")
+            vix_hist = vix_t.history(period="1d")
+            vix = float(vix_hist["Close"].iloc[-1]) if not vix_hist.empty else 18.0
+
+            iv30 = estimate_iv30(ticker, spot, vix)
+
+            return {
+                "ticker": ticker.upper(),
+                "spot": round(spot, 2),
+                "change": round(change, 2),
+                "change_pct": round(change_pct, 2),
+                "vix": round(vix, 2),
+                "iv30": round(iv30, 2),
+            }
+
+        def estimate_iv30(ticker: str, spot: float, vix: float) -> float:
+            """Estima IV30 desde opciones o VIX."""
+            try:
+                t = yf.Ticker(ticker if ticker.upper() not in ("SPX", "VIX") else "^" + ticker)
+                exps = t.options
+                if not exps:
+                    return vix * 1.15
+
+                today = datetime.now().date()
+                best_exp = None
+                best_dte = 9999
+                for exp in exps:
+                    exp_date = datetime.strptime(exp, "%Y-%m-%d").date()
+                    dte = (exp_date - today).days
+                    if abs(dte - 30) < abs(best_dte - 30):
+                        best_dte = dte
+                        best_exp = exp
+
+                if best_exp:
+                    chain = t.option_chain(best_exp)
+                    calls = chain.calls
+                    atm = calls[abs(calls["strike"] - spot) / spot < 0.03]
+                    ivs = atm["impliedVolatility"].dropna()
+                    ivs = ivs[ivs > 0]
+                    if len(ivs) > 0:
+                        return round(float(ivs.mean()) * 100, 2)
+            except Exception:
+                pass
+            return round(vix * 1.15, 2)
+
+        def run_mm_analysis(market: dict) -> dict:
+            """Genera análisis MM local."""
+            ticker = market["ticker"]
+            spot = market["spot"]
+            vix = market["vix"]
+            iv30 = market["iv30"]
+
+            strike_step = 5 if spot > 200 else 2.5 if spot > 50 else 1.0 if spot > 10 else 0.5
+            iv_daily = iv30 / 100 / math.sqrt(252)
+
+            call_wall = round((spot * (1 + 1.8 * iv_daily * math.sqrt(5))) / strike_step) * strike_step
+            put_wall = round((spot * (1 - 1.8 * iv_daily * math.sqrt(5))) / strike_step) * strike_step
+            zero_gamma = round(spot / strike_step) * strike_step
+
+            if vix < 15:
+                bias = "BULLISH"
+                bias_note = "VIX bajo, flujo positivo"
+            elif vix > 25:
+                bias = "BEARISH"
+                bias_note = "VIX alto, presión vendedora"
+            else:
+                bias = "NEUTRAL" if abs(market["change_pct"]) < 0.5 else ("BULLISH" if market["change_pct"] > 0 else "BEARISH")
+                bias_note = "Rango consolidación" if bias == "NEUTRAL" else "Momentum intradiario"
+
+            targets = []
+            horizons = [
+                ("SEMANAL", 5),
+                ("2 SEMANAS", 10),
+                ("MENSUAL", 21),
+                ("3 MESES", 63),
+                ("6 MESES", 126),
+                ("12 MESES", 252),
+            ]
+
+            for horizon_name, days in horizons:
+                exp_date = (datetime.now() + timedelta(days=days)).strftime("%m/%d/%y")
+                vol_mult = iv30 / 100 * math.sqrt(days / 252)
+
+                target_bull = round(spot * (1 + 0.84 * vol_mult) / strike_step) * strike_step
+                target_base = round(spot * (1 + 0.10 * vol_mult) / strike_step) * strike_step
+                target_bear = round(spot * (1 - 0.84 * vol_mult) / strike_step) * strike_step
+
+                cw = round(spot * (1 + 1.2 * vol_mult) / strike_step) * strike_step
+                pw = round(spot * (1 - 1.2 * vol_mult) / strike_step) * strike_step
+
+                signal = 8 if days <= 21 else 6 if days <= 126 else 5
+                gex = "NEGATIVO" if vix > 20 else "POSITIVO"
+                driver = "Gamma" if days <= 10 else "Vanna" if days <= 63 else "Charm"
+
+                targets.append({
+                    "horizon": horizon_name,
+                    "expDate": exp_date,
+                    "targetBull": target_bull,
+                    "targetBase": target_base,
+                    "targetBear": target_bear,
+                    "callWall": cw,
+                    "putWall": pw,
+                    "gexDominant": gex,
+                    "signalStrength": signal,
+                    "driver": driver,
+                    "bias": "BULL" if bias == "BULLISH" else "BEAR" if bias == "BEARISH" else "NEUTRAL",
+                })
+
+            key_strikes = []
+            for i in range(-4, 5):
+                if i == 0:
+                    continue
+                strike = round((spot + i * strike_step * 2) / strike_step) * strike_step
+                distance = abs(strike - spot) / spot
+                oi_base = 10000 * (1 - distance * 5)
+
+                if strike > spot:
+                    oi_calls = int(max(1000, oi_base * 1.2))
+                    oi_puts = int(max(500, oi_base * 0.3))
+                    gex = int(10 * (1 - distance * 8))
+                    level_type = "CALL WALL" if i == 4 else "RESISTENCIA"
+                else:
+                    oi_calls = int(max(500, oi_base * 0.3))
+                    oi_puts = int(max(1000, oi_base * 1.2))
+                    gex = int(-8 * (1 - distance * 8))
+                    level_type = "PUT WALL" if i == -4 else "SOPORTE"
+
+                magnetism = int(max(1, 10 * (1 - distance * 10)))
+
+                key_strikes.append({
+                    "strike": strike,
+                    "expDate": (datetime.now() + timedelta(days=7)).strftime("%m/%d"),
+                    "oiCalls": oi_calls,
+                    "oiPuts": oi_puts,
+                    "gexEstimated": gex,
+                    "vannaFlow": "COMPRA" if gex > 0 else "VENTA" if gex < -3 else "NEUTRAL",
+                    "charmDecay": "ALTO" if distance < 0.02 else "MEDIO" if distance < 0.05 else "BAJO",
+                    "volOiRatio": round(0.3 + distance * 2, 2),
+                    "levelType": level_type,
+                    "magnetism": magnetism,
+                })
+
+            key_strikes.sort(key=lambda x: x["strike"])
+
+            narrative = (
+                f"El análisis de Market Maker para {ticker} en ${spot:.2f} revela un posicionamiento {bias.lower()} "
+                f"con VIX en {vix:.2f} y volatilidad implícita de {iv30}%. La call wall en ${call_wall} actúa como "
+                f"resistencia clave mientras la put wall en ${put_wall} provee soporte institucional. "
+                f"El nivel zero-gamma en ${zero_gamma} marca el punto de inflexión donde los dealers cambian su perfil de hedging."
+            )
+
+            return {
+                "summary": {
+                    "callWall": call_wall,
+                    "putWall": put_wall,
+                    "zeroGamma": zero_gamma,
+                    "mmBias": bias,
+                    "mmBiasNote": bias_note,
+                },
+                "targets": targets,
+                "keyStrikes": key_strikes,
+                "narrative": narrative,
+            }
+
+        def create_levels_chart(market: dict, analysis: dict):
+            """Crea gráfico limpio y profesional con precio, targets y burbujas OI/Gamma."""
+            spot = market["spot"]
+            ticker = market["ticker"]
+            s = analysis["summary"]
+
+            try:
+                yf_ticker = ticker.upper()
+                if yf_ticker == "VIX":
+                    yf_ticker = "^VIX"
+                elif yf_ticker == "SPX":
+                    yf_ticker = "^GSPC"
+
+                t = yf.Ticker(yf_ticker)
+                hist = t.history(period="30d")
+
+                if hist.empty:
+                    dates = pd.date_range(end=datetime.now(), periods=30, freq="D")
+                    hist = pd.DataFrame({"Close": [spot] * 30}, index=dates)
+            except Exception:
+                dates = pd.date_range(end=datetime.now(), periods=30, freq="D")
+                hist = pd.DataFrame({"Close": [spot] * 30}, index=dates)
+
+            future_dates = pd.date_range(start=hist.index[-1], periods=91, freq="D")[1:]
+
+            fig = go.Figure()
+
+            fig.add_trace(go.Scatter(
+                x=hist.index,
+                y=hist["Close"],
+                mode="lines",
+                name="💰 PRECIO",
+                line=dict(color="#4169E1", width=4),
+                hovertemplate="<b>$%{y:,.2f}</b><extra></extra>",
+            ))
+
+            price_current = spot
+            zero_gamma = s["zeroGamma"]
+            call_wall = s["callWall"]
+            put_wall = s["putWall"]
+            iv30 = market.get("iv30", 0.3)
+
+            spotfit_range = price_current * 0.03
+            spotfit_strikes = [k for k in analysis["keyStrikes"] if abs(k["strike"] - price_current) <= spotfit_range]
+
+            spotfit_pressure_up = sum([k["oiCalls"] for k in spotfit_strikes if k["strike"] > price_current])
+            spotfit_pressure_down = sum([k["oiPuts"] for k in spotfit_strikes if k["strike"] < price_current])
+            spotfit_bias = 1 if spotfit_pressure_up > spotfit_pressure_down else -1
+
+            total_gex = sum([k["gexEstimated"] for k in analysis["keyStrikes"]])
+
+            magnetic_forces = []
+            for k in analysis["keyStrikes"]:
+                strike_price = k["strike"]
+                magnetism = k["magnetism"]
+                oi_total = k["oiCalls"] + k["oiPuts"]
+                distance = abs(strike_price - price_current)
+
+                if distance > 0.01:
+                    force_mag = (magnetism / 10.0) * (oi_total / 100000) / (distance ** 0.7)
+                    direction = 1 if strike_price > price_current else -1
+                    magnetic_forces.append({
+                        "strike": strike_price,
+                        "force": force_mag * direction,
+                        "magnetism": magnetism,
+                        "distance": distance,
+                        "oi": oi_total,
+                    })
+
+            magnetic_forces.sort(key=lambda x: abs(x["force"]), reverse=True)
+
+            projection_dates = future_dates[:60]
+            scenarios = {"central": [], "bull": [], "bear": []}
+
+            for scenario_name, scenario_factor in [("central", 1.0), ("bull", 1.5), ("bear", 0.5)]:
+                price_sim = price_current
+                scenario_prices = []
+
+                for i in range(len(projection_dates)):
+                    daily_vol = (price_current * iv30) / (252 ** 0.5)
+
+                    net_force = 0
+                    for mf in magnetic_forces[:5]:
+                        current_distance = abs(mf["strike"] - price_sim)
+                        if current_distance > 0.01:
+                            force_magnitude = (mf["magnetism"] / 10.0) * (mf["oi"] / 100000) / (current_distance ** 0.7)
+                            force_direction = 1 if mf["strike"] > price_sim else -1
+                            weight = 1.0 / (1.0 + current_distance / price_current)
+                            net_force += force_magnitude * force_direction * weight
+
+                    gex_factor = 0.6 if total_gex > 0 else 1.4
+                    spotfit_factor = 1.0 + (spotfit_bias * 0.3 * (1 - i / 20)) if i < 20 else 1.0
+                    time_decay = 1.0 - (0.6 * (i / len(projection_dates)))
+
+                    base_move = net_force * daily_vol * gex_factor * time_decay * spotfit_factor
+                    daily_move = base_move * scenario_factor
+
+                    max_daily = price_sim * 0.025
+                    daily_move = max(min(daily_move, max_daily), -max_daily)
+
+                    price_sim += daily_move
+
+                    barrier_factor = 1.03 if scenario_name == "bull" else 0.97 if scenario_name == "bear" else 1.01
+                    if price_sim > call_wall * barrier_factor:
+                        price_sim = call_wall * (barrier_factor - 0.01)
+                    elif price_sim < put_wall * (2 - barrier_factor):
+                        price_sim = put_wall * (2 - barrier_factor + 0.01)
+
+                    scenario_prices.append(price_sim)
+
+                scenarios[scenario_name] = scenario_prices
+
+            fig.add_trace(go.Scatter(
+                x=projection_dates,
+                y=scenarios["central"],
+                mode="lines",
+                name="🎯 PRONÓSTICO MM (70%)",
+                line=dict(color="#000000", width=5, dash="dash"),
+                opacity=0.9,
+                hovertemplate="<b>Central: $%{y:,.2f}</b><br>Probabilidad: 70%<extra></extra>",
+            ))
+
+            fig.add_trace(go.Scatter(
+                x=list(projection_dates) + list(projection_dates[::-1]),
+                y=scenarios["bull"] + scenarios["bear"][::-1],
+                fill="toself",
+                fillcolor="rgba(0, 0, 0, 0.1)",
+                line=dict(width=0),
+                name="📊 Rango Probabilidad (30%)",
+                showlegend=True,
+                hoverinfo="skip",
+            ))
+
+            fig.add_trace(go.Scatter(
+                x=projection_dates,
+                y=scenarios["bull"],
+                mode="lines",
+                name="📈 Escenario Bull (15%)",
+                line=dict(color="#10b981", width=2, dash="dot"),
+                opacity=0.5,
+                hovertemplate="<b>Bull: $%{y:,.2f}</b><br>Probabilidad: 15%<extra></extra>",
+            ))
+
+            fig.add_trace(go.Scatter(
+                x=projection_dates,
+                y=scenarios["bear"],
+                mode="lines",
+                name="📉 Escenario Bear (15%)",
+                line=dict(color="#ef4444", width=2, dash="dot"),
+                opacity=0.5,
+                hovertemplate="<b>Bear: $%{y:,.2f}</b><br>Probabilidad: 15%<extra></extra>",
+            ))
+
+            today = hist.index[-1]
+            fig.add_shape(
+                type="line",
+                x0=today,
+                x1=today,
+                y0=0,
+                y1=1,
+                yref="paper",
+                line=dict(color="#f59e0b", width=3, dash="dash"),
+            )
+            fig.add_annotation(
+                x=today,
+                y=1,
+                yref="paper",
+                text="📅 HOY",
+                showarrow=False,
+                yshift=10,
+                font=dict(size=12, color="#f59e0b", family="Arial Black"),
+                bgcolor="rgba(255,255,255,0.9)",
+                bordercolor="#f59e0b",
+                borderwidth=2,
+                borderpad=4,
+            )
+
+            targets = [
+                (s["callWall"], "🟢 CALL WALL", "#10b981", "solid", 3),
+                (s["putWall"], "🔴 PUT WALL", "#ef4444", "solid", 3),
+                (s["zeroGamma"], "⚡ ZERO GAMMA", "#8b5cf6", "dash", 2),
+                (spot, f"📍 SPOT ${spot:.0f}", "#1e40af", "dot", 2),
+            ]
+
+            for price, label, color, dash, width in targets:
+                fig.add_trace(go.Scatter(
+                    x=[hist.index[0], future_dates[-1]],
+                    y=[price, price],
+                    mode="lines",
+                    name=label,
+                    line=dict(color=color, width=width, dash=dash),
+                    showlegend=False,
+                    hovertemplate=f"<b>{label}</b><br>${price:,.2f}<extra></extra>",
+                ))
+
+                fig.add_annotation(
+                    x=future_dates[-1],
+                    y=price,
+                    text=f"<b>{label.split()[1] if len(label.split()) > 1 else label}</b>  ${price:.0f}",
+                    showarrow=False,
+                    xanchor="left",
+                    xshift=10,
+                    font=dict(size=11, color=color, family="Arial Black"),
+                    bgcolor="rgba(255,255,255,0.85)",
+                    bordercolor=color,
+                    borderwidth=2,
+                    borderpad=4,
+                )
+
+            strikes_support = [k for k in analysis["keyStrikes"] if k["strike"] < spot]
+            strikes_resistance = [k for k in analysis["keyStrikes"] if k["strike"] >= spot]
+
+            support_colors = [
+                "#7f1d1d", "#991b1b", "#b91c1c", "#dc2626",
+                "#ef4444", "#f87171", "#fca5a5", "#fecaca",
+            ]
+
+            resistance_colors = [
+                "#064e3b", "#065f46", "#047857", "#059669",
+                "#10b981", "#34d399", "#6ee7b7", "#a7f3d0",
+            ]
+
+            all_dates_list = list(hist.index) + list(future_dates)
+            repetitions = 4
+
+            num_support = len(strikes_support)
+            total_support_bubbles = num_support * repetitions
+
+            for idx in range(total_support_bubbles):
+                strike_idx = idx % num_support
+                k = strikes_support[strike_idx]
+
+                oi_total = k["oiCalls"] + k["oiPuts"]
+                gex_abs = abs(k["gexEstimated"])
+
+                rep_num = idx // num_support
+                size_factor = 1.0 - (rep_num * 0.15)
+                size = min(max(((oi_total / 500) + (gex_abs / 50)) * size_factor, 12), 55)
+
+                date_idx = int((idx / max(total_support_bubbles - 1, 1)) * (len(all_dates_list) - 1))
+                date_pos = all_dates_list[date_idx]
+
+                color_idx = min(strike_idx, len(support_colors) - 1)
+                color = support_colors[color_idx]
+
+                is_past = date_pos <= hist.index[-1]
+                opacity = 0.8 if is_past else 0.55
+
+                fig.add_trace(go.Scatter(
+                    x=[date_pos],
+                    y=[k["strike"]],
+                    mode="markers+text",
+                    marker=dict(
+                        size=size,
+                        color=color,
+                        opacity=opacity,
+                        line=dict(width=2 if is_past else 1, color="#450a0a"),
+                        symbol="circle",
+                    ),
+                    text=f"${k['strike']:.0f}" if rep_num == 0 else "",
+                    textposition="middle center",
+                    textfont=dict(size=10, color="white", family="Arial Black"),
+                    showlegend=False,
+                    hovertemplate=(
+                        f"<b>SOPORTE ${k['strike']}</b><br>"
+                        f"{'🔴 HISTÓRICO' if is_past else '🎯 PROYECCIÓN'}<br>"
+                        f"OI Total: {oi_total:,}<br>"
+                        f"  📞 Calls: {k['oiCalls']:,}<br>"
+                        f"  📉 Puts: {k['oiPuts']:,}<br>"
+                        f"GEX: {k['gexEstimated']:+,}M<br>"
+                        f"🔥 Gamma: {k['magnetism']}/10<extra></extra>"
+                    ),
+                ))
+
+            num_resistance = len(strikes_resistance)
+            total_resistance_bubbles = num_resistance * repetitions
+
+            for idx in range(total_resistance_bubbles):
+                strike_idx = idx % num_resistance
+                k = strikes_resistance[strike_idx]
+
+                oi_total = k["oiCalls"] + k["oiPuts"]
+                gex_abs = abs(k["gexEstimated"])
+
+                rep_num = idx // num_resistance
+                size_factor = 1.0 - (rep_num * 0.15)
+                size = min(max(((oi_total / 500) + (gex_abs / 50)) * size_factor, 12), 55)
+
+                date_idx = int((idx / max(total_resistance_bubbles - 1, 1)) * (len(all_dates_list) - 1))
+                date_pos = all_dates_list[date_idx]
+
+                color_idx = min(strike_idx, len(resistance_colors) - 1)
+                color = resistance_colors[color_idx]
+
+                is_past = date_pos <= hist.index[-1]
+                opacity = 0.8 if is_past else 0.55
+
+                fig.add_trace(go.Scatter(
+                    x=[date_pos],
+                    y=[k["strike"]],
+                    mode="markers+text",
+                    marker=dict(
+                        size=size,
+                        color=color,
+                        opacity=opacity,
+                        line=dict(width=2 if is_past else 1, color="#022c22"),
+                        symbol="circle",
+                    ),
+                    text=f"${k['strike']:.0f}" if rep_num == 0 else "",
+                    textposition="middle center",
+                    textfont=dict(size=10, color="white", family="Arial Black"),
+                    showlegend=False,
+                    hovertemplate=(
+                        f"<b>RESISTENCIA ${k['strike']}</b><br>"
+                        f"{'🟢 HISTÓRICO' if is_past else '🎯 PROYECCIÓN'}<br>"
+                        f"OI Total: {oi_total:,}<br>"
+                        f"  📞 Calls: {k['oiCalls']:,}<br>"
+                        f"  📉 Puts: {k['oiPuts']:,}<br>"
+                        f"GEX: {k['gexEstimated']:+,}M<br>"
+                        f"🔥 Gamma: {k['magnetism']}/10<extra></extra>"
+                    ),
+                ))
+
+            fig.update_layout(
+                title=dict(
+                    text=f"<b style='font-size:20px'>{ticker}</b> · PROYECCIÓN MM · PRECIO + TARGETS + BURBUJAS OI/GAMMA",
+                    font=dict(size=18, color="#1e293b", family="Arial"),
+                    x=0.5,
+                    xanchor="center",
+                    y=0.97,
+                    yanchor="top",
+                ),
+                xaxis=dict(
+                    title=dict(text="<b>LÍNEA DE TIEMPO (30 DÍAS PASADO + 90 DÍAS FUTURO)</b>", font=dict(size=11, color="#475569")),
+                    showgrid=True,
+                    gridcolor="rgba(148,163,184,0.15)",
+                    showline=True,
+                    linewidth=2,
+                    linecolor="#cbd5e1",
+                    tickformat="%d/%m",
+                    tickangle=0,
+                    tickfont=dict(size=10, color="#64748b"),
+                ),
+                yaxis=dict(
+                    title=dict(text="<b>PRECIO USD ($)</b>", font=dict(size=11, color="#475569")),
+                    showgrid=True,
+                    gridcolor="rgba(148,163,184,0.15)",
+                    showline=True,
+                    linewidth=2,
+                    linecolor="#cbd5e1",
+                    tickformat="$,.0f",
+                    tickfont=dict(size=11, color="#1e293b"),
+                    zeroline=False,
+                ),
+                height=600,
+                plot_bgcolor="rgba(255,255,255,0.95)",
+                paper_bgcolor="rgba(248,250,252,1)",
+                hovermode="closest",
+                showlegend=True,
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="center",
+                    x=0.5,
+                    bgcolor="rgba(255,255,255,0.95)",
+                    bordercolor="#cbd5e1",
+                    borderwidth=1,
+                    font=dict(size=11, color="#1e293b", family="Arial"),
+                ),
+                margin=dict(l=80, r=150, t=80, b=60),
+            )
+
+            return fig
+
+        col_h1, col_h2, col_h3 = st.columns([2, 3, 2])
+        with col_h2:
+            st.markdown('<p class="main-header">📊 MM Target Engine</p>', unsafe_allow_html=True)
+
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            ticker = st.text_input("", placeholder="Ticker: SPY, QQQ, AAPL, TSLA, NVDA...", label_visibility="collapsed", key="calc_ticker")
+        with col2:
+            analyze_button = st.button("🚀 ANALIZAR", type="primary", use_container_width=True, key="calc_analyze_btn")
+        with col3:
+            save_json = st.checkbox("💾 Export JSON", value=False, key="calc_save_json")
+
+        if analyze_button and ticker:
+            with st.spinner(f"Analizando {ticker.upper()}..."):
+                try:
+                    market = get_market_data(ticker)
+                    analysis = run_mm_analysis(market)
+                    st.session_state["calc_market"] = market
+                    st.session_state["calc_analysis"] = analysis
+                    st.session_state["calc_analyzed"] = True
+                    st.session_state["calc_save_json"] = save_json
+                except Exception as e:
+                    st.error(f"❌ {str(e)}")
+                    st.session_state["calc_analyzed"] = False
+
+        if st.session_state.get("calc_analyzed", False):
+            market = st.session_state["calc_market"]
+            analysis = st.session_state["calc_analysis"]
+            s = analysis["summary"]
+
+            c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+
+            with c1:
+                st.metric("💰 SPOT", f"${market['spot']:.2f}", f"{market['change']:+.2f} ({market['change_pct']:+.2f}%)")
+            with c2:
+                st.metric("📊 VIX", f"{market['vix']:.2f}")
+            with c3:
+                st.metric("📈 IV30", f"{market['iv30']:.1f}%")
+            with c4:
+                st.metric("🟢 CALL WALL", f"${s['callWall']}")
+            with c5:
+                st.metric("🔴 PUT WALL", f"${s['putWall']}")
+            with c6:
+                st.metric("⚡ ZERO GAMMA", f"${s['zeroGamma']}")
+            with c7:
+                bias_emoji = "🔥" if s["mmBias"] == "BULLISH" else "❄️" if s["mmBias"] == "BEARISH" else "⚖️"
+                st.metric(f"{bias_emoji} BIAS", s["mmBias"])
+
+            spotfit_range = market["spot"] * 0.03
+            spotfit_strikes = [k for k in analysis["keyStrikes"] if abs(k["strike"] - market["spot"]) <= spotfit_range]
+
+            if spotfit_strikes:
+                spotfit_calls = sum([k["oiCalls"] for k in spotfit_strikes if k["strike"] > market["spot"]])
+                spotfit_puts = sum([k["oiPuts"] for k in spotfit_strikes if k["strike"] < market["spot"]])
+                spotfit_total = spotfit_calls + spotfit_puts
+                spotfit_bias_text = "ALCISTA 📈" if spotfit_calls > spotfit_puts else "BAJISTA 📉" if spotfit_puts > spotfit_calls else "NEUTRAL ⚖️"
+                spotfit_color = "#10b981" if spotfit_calls > spotfit_puts else "#ef4444" if spotfit_puts > spotfit_calls else "#8b5cf6"
+
+                st.markdown(
+                    f"""
+                    <div style='background: linear-gradient(135deg, {spotfit_color}15, {spotfit_color}25);
+                                border-left: 5px solid {spotfit_color};
+                                padding: 12px 20px;
+                                border-radius: 8px;
+                                margin: 15px 0;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>
+                        <div style='display: flex; align-items: center; justify-content: space-between;'>
+                            <div style='font-size: 15px; color: #1e293b; font-weight: bold;'>
+                                🎯 SPOTFIT DETECTADO · Órdenes pegadas (±3% del spot)
+                            </div>
+                            <div style='font-size: 14px; color: {spotfit_color}; font-weight: bold;'>
+                                PRESIÓN: {spotfit_bias_text}
+                            </div>
+                        </div>
+                        <div style='margin-top: 8px; display: flex; gap: 30px; font-size: 13px; color: #475569;'>
+                            <div><b>📞 Calls:</b> {spotfit_calls:,} OI</div>
+                            <div><b>📉 Puts:</b> {spotfit_puts:,} OI</div>
+                            <div><b>🎲 Total:</b> {spotfit_total:,} OI</div>
+                            <div><b>📍 Strikes:</b> {len(spotfit_strikes)} niveles pegados</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("---")
+
+            st.markdown("### 🎯 TARGETS · GEX GRAVITY")
+
+            targets_data = []
+            for t in analysis["targets"]:
+                bull_pct = (t["targetBull"] - market["spot"]) / market["spot"] * 100
+                bear_pct = (t["targetBear"] - market["spot"]) / market["spot"] * 100
+                targets_data.append({
+                    "📅": t["horizon"],
+                    "EXP": t["expDate"],
+                    "🟢 BULL": f"${t['targetBull']} (+{bull_pct:.1f}%)",
+                    "⚪ BASE": f"${t['targetBase']}",
+                    "🔴 BEAR": f"${t['targetBear']} ({bear_pct:.1f}%)",
+                    "CW": f"${t['callWall']}",
+                    "PW": f"${t['putWall']}",
+                    "GEX": t["gexDominant"][:3],
+                    "💪": f"{t['signalStrength']}/10",
+                    "DRIVER": t["driver"][:3].upper(),
+                    "BIAS": t["bias"],
+                })
+
+            df_targets = pd.DataFrame(targets_data)
+            st.dataframe(df_targets, use_container_width=True, hide_index=True, height=250)
+
+            st.markdown("---")
+
+            st.markdown("### 🔥 KEY STRIKES · OI + GEX MAP")
+
+            strikes_data = []
+            for k in analysis["keyStrikes"]:
+                arrow = "🔺" if k["strike"] > market["spot"] else "🔻"
+                strikes_data.append({
+                    "🎯": f"{arrow} ${k['strike']}",
+                    "EXP": k["expDate"],
+                    "OI📞": f"{k['oiCalls']:,}",
+                    "OI📍": f"{k['oiPuts']:,}",
+                    "GEX": f"{k['gexEstimated']:+d}M",
+                    "VANNA": k["vannaFlow"][:3],
+                    "CHARM": k["charmDecay"][:1],
+                    "V/OI": f"{k['volOiRatio']:.1f}",
+                    "TIPO": k["levelType"],
+                    "🧲": f"{'⚡' * (k['magnetism']//2)}{k['magnetism']}",
+                })
+
+            df_strikes = pd.DataFrame(strikes_data)
+
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                st.markdown("**🔻 SOPORTE (Puts)**")
+                df_puts = df_strikes[df_strikes["🎯"].str.contains("🔻")]
+                st.dataframe(df_puts, hide_index=True, height=180)
+            with col_s2:
+                st.markdown("**🔺 RESISTENCIA (Calls)**")
+                df_calls = df_strikes[df_strikes["🎯"].str.contains("🔺")]
+                st.dataframe(df_calls, hide_index=True, height=180)
+
+            st.markdown("---")
+
+            st.markdown("### 📈 MAPA VISUAL · NIVELES MM")
+
+            fig = create_levels_chart(market, analysis)
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+            st.markdown("---")
+            st.markdown("---")
+
+            with st.expander("📊 ANÁLISIS + METODOLOGÍA"):
+                col_n1, col_n2 = st.columns([3, 2])
+                with col_n1:
+                    st.markdown("**Posicionamiento MM:**")
+                    st.caption(analysis["narrative"])
+                with col_n2:
+                    st.markdown("**Gravity Formula:**")
+                    st.code(
+                        """GRAVITY(K) =
+0.45×Γ×OI×Spot (GEX)
+0.25×Vanna×OI×ΔIV
+0.15×Charm×OI×Δt
+0.15×Vol/OI
+
+TARGET = argmax[GRAVITY]
+RANGO = Spot×exp(±σ√T)""",
+                        language="python",
+                    )
+
+            if st.session_state.get("calc_save_json", False):
+                json_data = {
+                    "market": market,
+                    "analysis": analysis,
+                    "generated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "mode": "WEB_LOCAL",
+                }
+                st.download_button(
+                    "📥 DESCARGAR JSON",
+                    data=json.dumps(json_data, indent=2, ensure_ascii=False),
+                    file_name=f"mm_{market['ticker']}_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                    mime="application/json",
+                )
+        else:
+            st.info("👆 Ingresa un ticker arriba y presiona **ANALIZAR**")
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown("**📊 SPY**  \nS&P 500 ETF")
+            with col2:
+                st.markdown("**💻 QQQ**  \nNasdaq 100")
+            with col3:
+                st.markdown("**🍎 AAPL**  \nApple Inc")
+            with col4:
+                st.markdown("**⚡ TSLA**  \nTesla Motors")
 
 
 if __name__ == "__main__":
