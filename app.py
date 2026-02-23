@@ -6401,8 +6401,6 @@ def main():
     # Tab 5: Analyst Rating Flow
         # Tab 5: Analyst Rating Flow
     if active_tab == tab_labels[3]:
-        st.subheader("Rating Flow")
-        
         # Estilos personalizados
         st.markdown("""
             <style>
@@ -6719,8 +6717,6 @@ def main():
 
     # Tab 6: MM Flow Dynamics
     if active_tab == tab_labels[4]:
-        st.subheader("📊 MM Flow Dynamics - Market Maker Positioning Analysis")
-        
         col1, col2 = st.columns(2)
         with col1:
             ticker = st.text_input("Stock Ticker", "SPY", key="mm_flow_ticker").upper()
@@ -6999,9 +6995,6 @@ def main():
 
     # Tab 8: INSTITUTIONAL MM SYSTEM - Phase 1
     if active_tab == tab_labels[5]:
-        st.markdown("# Gamma-Based Market Microstructure Analysis")
-        st.divider()
-        
         try:
             from mm_orchestrator import MMSystemOrchestrator
             from mm_memory import MemorySystem
@@ -8503,10 +8496,6 @@ def main():
             )
 
             return fig
-
-        col_h1, col_h2, col_h3 = st.columns([2, 3, 2])
-        with col_h2:
-            st.markdown('<p class="main-header">📊 MM Target Engine</p>', unsafe_allow_html=True)
 
         if "calc_save_json" not in st.session_state:
             st.session_state["calc_save_json"] = False
