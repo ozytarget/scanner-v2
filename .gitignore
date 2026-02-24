@@ -91,3 +91,6 @@ tokens/
 passwords.txt
 *_passwords.txt
 *.pwd
+
+# Student registry - contains password assignments
+registro_alumnos.csv

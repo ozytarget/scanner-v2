@@ -112,7 +112,7 @@ def get_local_ip():
     try:
         hostname = socket.gethostname()
         return socket.gethostbyname(hostname)
-    except:
+    except OSError:
         return "Unknown"
 
 def create_user(username: str, email: str, password: str, tier: str = "Premium") -> tuple:
@@ -236,7 +236,7 @@ def check_daily_limit(username: str) -> tuple:
         remaining = daily_limit - usage_today
         return remaining > 0, usage_today, daily_limit
     
-    except:
+    except Exception:
         return False, 0, 0
 
 def increment_usage(username: str):
@@ -257,7 +257,7 @@ def get_all_users() -> pd.DataFrame:
         df = pd.read_sql_query("SELECT id, username, email, tier, created_date, expiration_date, active, usage_today, daily_limit FROM users", conn)
         conn.close()
         return df
-    except:
+    except Exception:
         return pd.DataFrame()
 
 def get_activity_log() -> pd.DataFrame:
@@ -267,7 +267,7 @@ def get_activity_log() -> pd.DataFrame:
         df = pd.read_sql_query("SELECT username, action, timestamp, ip_address FROM activity_log ORDER BY timestamp DESC LIMIT 100", conn)
         conn.close()
         return df
-    except:
+    except Exception:
         return pd.DataFrame()
 
 def deactivate_user(username: str):
@@ -279,7 +279,7 @@ def deactivate_user(username: str):
         conn.commit()
         conn.close()
         return True
-    except:
+    except Exception:
         return False
 
 def extend_license(username: str, days: int):
@@ -296,7 +296,7 @@ def extend_license(username: str, days: int):
             conn.commit()
             conn.close()
             return True
-    except:
+    except Exception:
         pass
     return False
 
@@ -320,7 +320,7 @@ def get_user_info(username: str) -> dict:
                 "usage_today": result[5],
                 "active": result[6]
             }
-    except:
+    except Exception:
         pass
     return None
 
@@ -407,7 +407,7 @@ def get_user_stats() -> dict:
             "premium_users": premium_users,
             "total_logins": total_logins
         }
-    except:
+    except Exception:
         return {
             "total_active": 0,
             "free_users": 0,
@@ -432,7 +432,7 @@ def change_user_tier(username: str, new_tier: str) -> bool:
         conn.commit()
         conn.close()
         return True
-    except:
+    except Exception:
         return False
 
 def reset_user_daily_limit(username: str) -> bool:
@@ -445,7 +445,7 @@ def reset_user_daily_limit(username: str) -> bool:
         conn.commit()
         conn.close()
         return True
-    except:
+    except Exception:
         return False
 
 def set_unlimited_access(username: str, days: int = 365) -> bool:
@@ -467,7 +467,7 @@ def set_unlimited_access(username: str, days: int = 365) -> bool:
         conn.commit()
         conn.close()
         return True
-    except:
+    except Exception:
         return False
 
 def is_legacy_password_blocked(password: str) -> bool:

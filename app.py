@@ -13,11 +13,9 @@ from typing import List, Dict, Optional, Tuple
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-import matplotlib.pyplot as plt
 import io
 from io import StringIO
-import matplotlib.patches as mpatches
-from matplotlib.ticker import MaxNLocator, MultipleLocator, FixedLocator
+import yfinance as yf
 from datetime import datetime, timedelta, timezone
 import multiprocessing
 from threading import Lock
@@ -1132,7 +1130,7 @@ def plot_max_pain_histogram_with_levels(max_pain_table, current_price):
 def get_option_chains(ticker, expiration):
     url = f"{TRADIER_BASE_URL}/markets/options/chains"
     params = {"symbol": ticker, "expiration": expiration, "greeks": True}
-    response = requests.get(url, headers=HEADERS_TRADIER, params=params)
+    response = requests.get(url, headers=HEADERS_TRADIER, params=params, timeout=10)
     if response.status_code == 200:
         return response.json().get("options", {}).get("option", [])
     st.error("Error retrieving option chains.")
@@ -1604,7 +1602,7 @@ def fetch_batch_stock_data(tickers):
     tickers_str = ",".join(tickers)
     url = f"{TRADIER_BASE_URL}/markets/quotes"
     params = {"symbols": tickers_str}
-    response = requests.get(url, headers=HEADERS_TRADIER, params=params)
+    response = requests.get(url, headers=HEADERS_TRADIER, params=params, timeout=10)
     if response.status_code == 200:
         data = response.json().get("quotes", {}).get("quote", [])
         if isinstance(data, dict):
@@ -1735,7 +1733,7 @@ def get_financial_metrics(symbol: str) -> Dict[str, float]:
 
 def get_historical_prices_fmp(symbol: str, period: str = "daily", limit: int = 30) -> tuple[List[float], List[int]]:
     try:
-        response = requests.get(f"{FMP_BASE_URL}/historical-price-full/{symbol}?apikey={FMP_API_KEY}&timeseries={limit}")
+        response = requests.get(f"{FMP_BASE_URL}/historical-price-full/{symbol}?apikey={FMP_API_KEY}&timeseries={limit}", timeout=10)
         response.raise_for_status()
         data = response.json()
         if not data or "historical" not in data:
@@ -1827,7 +1825,7 @@ def fetch_data(endpoint: str, ticker: str = None, additional_params: dict = None
     if additional_params:
         params.update(additional_params)
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
             if isinstance(data, list) and len(data) == 0:
@@ -3339,10 +3337,6 @@ def fetch_fmp_shares_float(symbol: str) -> dict:
         logger.error(f"Error fetching shares float for {symbol}: {e}")
         return {}
 
-import yfinance as yf
-
-import yfinance as yf
-
 @st.cache_data(ttl=3600)
 def fetch_fmp_market_movers() -> dict:
     """Fetch biggest gainers, losers, and most active stocks using Yahoo Finance (FMP fallback)."""
@@ -3764,9 +3758,9 @@ def mm_contract_scanner(ticker, current_price, target_price, expiration_dates_di
                         all_strikes_processed[strike]['call_oi'] = max(all_strikes_processed[strike]['call_oi'], oi)
                         all_strikes_processed[strike]['call_volume'] += volume
                         all_strikes_processed[strike]['call_iv'].append(iv)
-                except:
+                except Exception:
                     pass
-        except:
+        except Exception:
             pass
     
     # Calculate global OI metrics
@@ -3812,7 +3806,7 @@ def mm_contract_scanner(ticker, current_price, target_price, expiration_dates_di
                     exp_type = '📈 LONG-DATED'
                     exp_weight = 0.6
                     
-            except:
+            except Exception:
                 continue
             
             # Process each option contract
@@ -6067,7 +6061,7 @@ def main():
                                                 vol_str = str(row['Volume']).replace(',', '')
                                                 try:
                                                     volume = float(vol_str)
-                                                except:
+                                                except (ValueError, TypeError):
                                                     volume = 0
                                             
                                             if volume > 2_000_000:
@@ -6087,7 +6081,7 @@ def main():
                                                     elif rsi < 30:  # Oversold (buena entrada)
                                                         score += 15
                                                         signals.append("🟢 RSI Oversold (Entry)")
-                                                except:
+                                                except (ValueError, TypeError):
                                                     pass
                                             
                                             # ===== SHORT SQUEEZE SIGNALS =====
@@ -6120,7 +6114,7 @@ def main():
                                                     if mcap < 2:  # Menos de $2B
                                                         score += 10
                                                         signals.append("🎯 Small Cap (High Volatility)")
-                                                except:
+                                                except (ValueError, TypeError):
                                                     pass
                                             
                                             # ===== RESULTADO FINAL =====
