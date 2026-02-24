@@ -15,6 +15,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
 import io
+from io import StringIO
 import matplotlib.patches as mpatches
 from matplotlib.ticker import MaxNLocator, MultipleLocator, FixedLocator
 from datetime import datetime, timedelta, timezone
@@ -32,6 +33,7 @@ import pytz
 import json
 import streamlit.components.v1 as components
 from dotenv import load_dotenv
+load_dotenv()  # Load env vars early so os.getenv() works everywhere
 from user_management import (
     authenticate_user, create_user, check_daily_limit, increment_usage,
     get_all_users, get_activity_log, deactivate_user, extend_license, 
@@ -61,18 +63,19 @@ def get_current_datetime():
 
 logging.getLogger("streamlit").setLevel(logging.ERROR)
 
-# Load environment variables from .env file
-from dotenv import load_dotenv
-load_dotenv()
+# Module-level cache: read & encode the video file only once per process lifetime.
+_VIDEO_B64_CACHE: Dict[str, str] = {}
 
 def render_background_video(video_path: str) -> None:
     if not os.path.isfile(video_path):
         logger.warning(f"Background video not found: {video_path}")
         return
     try:
-        with open(video_path, "rb") as video_file:
-            video_bytes = video_file.read()
-        video_base64 = base64.b64encode(video_bytes).decode("utf-8")
+        if video_path not in _VIDEO_B64_CACHE:
+            with open(video_path, "rb") as video_file:
+                video_bytes = video_file.read()
+            _VIDEO_B64_CACHE[video_path] = base64.b64encode(video_bytes).decode("utf-8")
+        video_base64 = _VIDEO_B64_CACHE[video_path]
         st.markdown(
             f"""
             <style>
@@ -112,7 +115,7 @@ retry_strategy = Retry(total=5, backoff_factor=1, status_forcelist=[429, 500, 50
 adapter = HTTPAdapter(max_retries=retry_strategy)
 session_fmp.mount("https://", adapter)
 session_tradier.mount("https://", adapter)
-num_workers = min(100, multiprocessing.cpu_count())
+num_workers = min(16, multiprocessing.cpu_count() * 2)  # Avoid excessive thread count; cloud hosts have 1-4 vCPUs
 
 # API Keys and Constants (loaded from .env for security)
 FMP_API_KEY = os.getenv("FMP_API_KEY", "")
@@ -202,6 +205,7 @@ def load_passwords():
     return passwords
 
 def save_passwords(passwords):
+    """Legacy bulk save – kept for admin tooling.  Do NOT call from hot paths; use update_password_usage() instead."""
     conn = sqlite3.connect(PASSWORDS_DB, timeout=10)
     c = conn.cursor()
     try:
@@ -215,6 +219,23 @@ def save_passwords(passwords):
     finally:
         conn.close()
     logger.info("Passwords updated in database.")
+
+def update_password_usage(hashed_pwd: str, usage_count: int, ip1: str, ip2: str) -> None:
+    """O(1) targeted UPDATE for a single password row – avoids DELETE+reinsert of entire table."""
+    conn = sqlite3.connect(PASSWORDS_DB, timeout=10)
+    c = conn.cursor()
+    try:
+        c.execute(
+            "UPDATE passwords SET usage_count=?, ip1=?, ip2=? WHERE password=?",
+            (usage_count, ip1, ip2, hashed_pwd)
+        )
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Error updating password usage: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+    logger.info(f"Password usage updated (count={usage_count}).")
 
 def get_local_ip():
     try:
@@ -245,7 +266,12 @@ def authenticate_password(input_password):
                 elif data["ip2"] == "" and data["ip1"] != local_ip:
                     passwords[hashed_pwd]["ip2"] = local_ip
                 passwords[hashed_pwd]["usage_count"] += 1
-                save_passwords(passwords)
+                update_password_usage(
+                    hashed_pwd,
+                    passwords[hashed_pwd]["usage_count"],
+                    passwords[hashed_pwd]["ip1"],
+                    passwords[hashed_pwd]["ip2"]
+                )
                 logger.info(f"Authentication successful from IP: {local_ip}, usage count: {passwords[hashed_pwd]['usage_count']}")
                 return True
             elif data["usage_count"] == 2 and (data["ip1"] == local_ip or data["ip2"] == local_ip):
@@ -491,7 +517,6 @@ def get_finviz_options_data(ticker: str, expiration: str = "", strike_filter: st
         response.raise_for_status()
         
         # Parse CSV response
-        from io import StringIO
         df = pd.read_csv(StringIO(response.text))
         
         if df.empty:
@@ -533,7 +558,6 @@ def get_finviz_expiration_dates(ticker: str) -> List[str]:
         response = requests.get(url, params=params, headers=HEADERS_FINVIZ, timeout=15)
         response.raise_for_status()
         
-        from io import StringIO
         df = pd.read_csv(StringIO(response.text))
         
         if df.empty or "Expiration" not in df.columns:
@@ -679,7 +703,6 @@ def get_finviz_screener_elite(filters: Dict[str, any] = None, columns: List[str]
         response.raise_for_status()
         
         # Parse CSV response into DataFrame
-        from io import StringIO
         df = pd.read_csv(StringIO(response.text))
         
         if df.empty:
@@ -2729,8 +2752,7 @@ def init_db():
                 logger.info("Created assigned_contracts table")
 
 
-db_lock = Lock()
-DB_PATH = "options_tracker.db"
+DB_PATH = "options_tracker.db"  # db_lock reuses the one defined at module top
 
 @contextmanager
 def get_db_connection():
@@ -2786,7 +2808,9 @@ def update_contract_prices():
                     
                     pl_data = {}
                     updates = []
-                    get_options_data.clear()  # Clear cache for fresh data
+                    # Note: do NOT clear get_options_data cache here; let TTL handle refresh
+                    # so repeated calls for the same (ticker, expiration) within the loop
+                    # are served from cache instead of firing a new API request each time.
                     for contract in contracts:
                         contract_id, ticker, strike, option_type, expiration_date, assigned_price = contract
                         if assigned_price == 0:
@@ -2898,6 +2922,8 @@ def auto_update_prices():
     if current_time - st.session_state.last_update >= interval:
         try:
             pl_data = update_contract_prices()
+            if pl_data is None:
+                pl_data = {}
             for key, data in pl_data.items():
                 st.session_state[f"pl_{key}"] = data["pl"] if data["pl"] is not None else 0.0
                 st.session_state[f"gamma_{key}"] = data["gamma"] if data["gamma"] is not None else 0.0
@@ -3978,6 +4004,7 @@ def mm_contract_scanner(ticker, current_price, target_price, expiration_dates_di
                     mm_score = mm_score * exp_weight
                     
                     # Calculate additional metrics for reporting
+                    liquidity_score = micro_score  # micro_score = bid-ask spread + volume tradability
                     spread_pct = (spread / mid_price * 100) if mid_price > 0 else 0
                     
                     # Probability of profit (different from ITM)
@@ -5447,9 +5474,6 @@ def main():
             Example:
                 https://elite.finviz.com/export.ashx?v=111&f=fa_div_pos,sec_technology&auth=TOKEN
             """
-            import time
-            from io import StringIO
-            
             try:
                 # Add delay to avoid rate limiting
                 if add_delay:
