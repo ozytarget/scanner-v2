@@ -336,20 +336,24 @@ def login_alumno():
             "Don't have access yet? &nbsp;<b style='color:#fff;'>Monthly Subscription</b></p>",
             unsafe_allow_html=True,
         )
-        import streamlit.components.v1 as _components
-        _components.html(
+        st.markdown(
             """
-            <div style="display:flex; justify-content:center; align-items:center; padding:8px 0;">
-              <script async src="https://js.stripe.com/v3/buy-button.js"></script>
-              <stripe-buy-button
-                buy-button-id="buy_btn_1T4tNeFxhc4xELQpxdbGRNQO"
-                publishable-key="pk_live_51N5coyFxhc4xELQpXOGJlOzLS9NgLLSm3CLOmSOmqq0xBSj0gYXxeFv8LCnUsX3s4N4tAgwbHK9cBt8Vuf6Mr90l00dJQerMxT"
-              >
-              </stripe-buy-button>
+            <div style="text-align:center; margin:8px 0;">
+                <a href="https://buy.stripe.com/8x23cv7We8ro3Nn4Gg43S02" target="_blank" style="
+                    display: inline-block;
+                    background: #635BFF;
+                    color: #fff;
+                    font-size: 15px;
+                    font-weight: 700;
+                    padding: 12px 36px;
+                    border-radius: 8px;
+                    text-decoration: none;
+                    letter-spacing: 0.5px;
+                    box-shadow: 0 4px 14px #635BFF55;
+                ">💳 Subscribe Monthly</a>
             </div>
             """,
-            height=70,
-            scrolling=False,
+            unsafe_allow_html=True,
         )
         st.markdown(
             "<p style='text-align:center; color:#555; font-size:12px; margin-top:4px;'>"
