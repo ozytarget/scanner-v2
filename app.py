@@ -332,27 +332,24 @@ def login_alumno():
         # ── Stripe Subscription Button ──────────────────────────────────────
         st.markdown("---")
         st.markdown(
-            "<p style='text-align:center; color:#888; font-size:14px;'>"
-            "¿No tienes acceso? Suscríbete para obtener tu contraseña VIP</p>",
-            unsafe_allow_html=True,
-        )
-        import streamlit.components.v1 as _components
-        _components.html(
             """
-            <div style="display:flex; justify-content:center; margin-top:8px;">
-              <script async src="https://js.stripe.com/v3/buy-button.js"></script>
-              <stripe-buy-button
-                buy-button-id="buy_btn_1T4tNeFxhc4xELQpxdbGRNQO"
-                publishable-key="pk_live_51N5coyFxhc4xELQpXOGJlOzLS9NgLLSm3CLOmSOmqq0xBSj0gYXxeFv8LCnUsX3s4N4tAgwbHK9cBt8Vuf6Mr90l00dJQerMxT"
-              >
-              </stripe-buy-button>
+            <div style="text-align:center; margin-top:10px;">
+                <p style="color:#aaa; font-size:14px; margin-bottom:12px;">Don't have access yet?</p>
+                <a href="https://buy.stripe.com/8x23cv7We8ro3Nn4Gg43S02" target="_blank" style="
+                    display: inline-block;
+                    background: linear-gradient(135deg, #635BFF 0%, #4B44CC 100%);
+                    color: white;
+                    font-size: 16px;
+                    font-weight: 700;
+                    padding: 14px 40px;
+                    border-radius: 8px;
+                    text-decoration: none;
+                    letter-spacing: 0.5px;
+                    box-shadow: 0 0 20px #635BFF55;
+                ">💳 Monthly Subscription</a>
+                <p style="color:#555; font-size:12px; margin-top:10px;">Secure payment · You will receive your password by email</p>
             </div>
             """,
-            height=160,
-        )
-        st.markdown(
-            "<p style='text-align:center; color:#555; font-size:12px; margin-top:4px;'>"
-            "Pago seguro vía Stripe · Recibirás tu contraseña por email</p>",
             unsafe_allow_html=True,
         )
 
