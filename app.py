@@ -358,7 +358,7 @@ def login_alumno():
         )
         st.markdown(
             """
-            <div style="text-align:center; margin-top:16px;">
+            <div style="text-align:center; margin-top:40px; padding-top:16px; border-top: 1px solid #222;">
                 <a href="mailto:ozytargetcom@gmail.com?subject=Pro%20Scanner%20-%20Trial%2015%20Days&body=Hi%2C%20I%20would%20like%20to%20request%20a%2015-day%20free%20trial%20for%20Pro%20Scanner.%0A%0AName%3A%20%0AEmail%3A%20" target="_blank" style="
                     display: inline-block;
                     background: transparent;
