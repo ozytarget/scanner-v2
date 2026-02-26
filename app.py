@@ -359,7 +359,7 @@ def login_alumno():
         st.markdown(
             """
             <div style="text-align:center; margin-top:40px; padding-top:16px; border-top: 1px solid #222;">
-                <a href="mailto:ozytargetcom@gmail.com?subject=Pro%20Scanner%20-%20Trial%2015%20Days&body=Hi%2C%20I%20would%20like%20to%20request%20a%2015-day%20free%20trial%20for%20Pro%20Scanner.%0A%0AName%3A%20%0AEmail%3A%20" target="_blank" style="
+                <a href="https://wa.me/16789789414?text=Hi%2C%20I%27d%20like%20to%20request%20a%2015-day%20free%20trial%20for%20Pro%20Scanner." target="_blank" style="
                     display: inline-block;
                     background: transparent;
                     color: #39FF14;
@@ -372,7 +372,7 @@ def login_alumno():
                     letter-spacing: 0.5px;
                     box-shadow: 0 0 12px #39FF1433;
                 ">🚀 Try Free — 15 Days</a>
-                <p style="color:#555; font-size:12px; margin-top:8px;">Send us an email and we'll set up your trial access</p>
+                <p style="color:#555; font-size:12px; margin-top:8px;">Message us on WhatsApp and we'll set up your trial access</p>
             </div>
             """,
             unsafe_allow_html=True,
