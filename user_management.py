@@ -108,8 +108,14 @@ def initialize_users_db():
     conn.close()
 
 def get_local_ip():
-    """Get user IP address"""
+    """Get user IP address - uses env var in cloud deployments"""
     try:
+        forwarded = os.getenv("HTTP_X_FORWARDED_FOR", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = os.getenv("HTTP_X_REAL_IP", "")
+        if real_ip:
+            return real_ip.strip()
         hostname = socket.gethostname()
         return socket.gethostbyname(hostname)
     except OSError:

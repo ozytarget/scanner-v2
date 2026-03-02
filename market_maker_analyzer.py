@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import math
 from typing import Dict, List, Optional, Tuple
 
@@ -295,7 +295,7 @@ class MarketMakerAnalyzer:
             aggregates = self._aggregate_by_strike(options, price)
             iv_exp = self._weighted_iv(aggregates)
             try:
-                days_exp = max(1, abs((datetime.fromisoformat(exp) - datetime.utcnow()).days))
+                days_exp = max(1, abs((datetime.fromisoformat(exp) - datetime.now(timezone.utc).replace(tzinfo=None)).days))
             except ValueError:
                 days_exp = 7
             pivot_exp = self._pivot_from_aggregates(aggregates)
@@ -377,8 +377,8 @@ class MarketMakerAnalyzer:
         days = 7
         if expirations:
             try:
-                nearest = min(expirations, key=lambda d: abs((datetime.fromisoformat(d) - datetime.utcnow()).days))
-                days = max(1, abs((datetime.fromisoformat(nearest) - datetime.utcnow()).days))
+                nearest = min(expirations, key=lambda d: abs((datetime.fromisoformat(d) - datetime.now(timezone.utc).replace(tzinfo=None)).days))
+                days = max(1, abs((datetime.fromisoformat(nearest) - datetime.now(timezone.utc).replace(tzinfo=None)).days))
             except ValueError:
                 days = 7
 
