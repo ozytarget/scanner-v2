@@ -1,0 +1,13 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/dashboard/calculo/page": "app/dashboard/calculo/page.js",
+  "/dashboard/metrics/page": "app/dashboard/metrics/page.js",
+  "/dashboard/news/page": "app/dashboard/news/page.js",
+  "/dashboard/analyst/page": "app/dashboard/analyst/page.js",
+  "/dashboard/elliott/page": "app/dashboard/elliott/page.js",
+  "/dashboard/multidate/page": "app/dashboard/multidate/page.js",
+  "/dashboard/options/page": "app/dashboard/options/page.js",
+  "/dashboard/screener/page": "app/dashboard/screener/page.js"
+}
