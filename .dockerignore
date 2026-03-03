@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+.env
+*.db
+*.sqlite
+auth_data/backups
+logs/
+.vscode
+frontend/node_modules
+frontend/.next
+frontend/.env.local
